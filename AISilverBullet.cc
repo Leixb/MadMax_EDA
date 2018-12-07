@@ -100,8 +100,43 @@ void PLAYER_NAME::init() {
     compute_maps();
 }
 
-void PLAYER_NAME::compute_maps() {}
-void PLAYER_NAME::bfs(queue<pair<Pos, int> > &q, dmap &m, const bool &cross_city) { }
+void PLAYER_NAME::compute_maps() {
+    queue<pair<Pos, int> > w, f;
+    for (int i=0; i < rows(); ++i) {
+        for (int j=0; j < cols(); ++j) {
+            const CellType ct = cell(Pos(i, j)).type;
+            if (ct == Water) w.emplace(Pos(i, j), 0);
+            else if (ct == Station) f.emplace(Pos(i, j), 0);
+            else if (ct == City) {
+                //TODO
+            }
+        }
+    }
+    bfs(w, water_map, true);
+    bfs(f, fuel_map, false);
+}
+
+void PLAYER_NAME::bfs(queue<pair<Pos, int> > &q, dmap &m, const bool &cross_city) {
+    m = dmap(rows(), vector<int>(cols(), INF));
+    while(!q.empty()) {
+        const Pos p = q.front().first;
+        const int d = q.front().second;
+        q.pop();
+
+        if (m[p.i][p.j] != INF) continue;
+
+        m[p.i][p.j] = d;
+
+        for (int i = 0; i < DirSize-1; ++i) {
+            const Pos p2 = p + Dir(i);
+            if (pos_ok(p2)) {
+                const CellType ct = cell(p2).type;
+                if (ct == Road or ct == Desert or (ct == City and cross_city))
+                    q.emplace(p2, d+1);
+            }
+        }
+    }
+}
 
 void PLAYER_NAME::move_cars() {
     for (const int &car_id : cars(me()))
