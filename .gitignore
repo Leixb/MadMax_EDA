@@ -1,0 +1,7 @@
+Game
+SecGame
+*.o
+*.exe
+Makefile.deps
+*.res
+*.txt
