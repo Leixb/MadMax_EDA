@@ -258,7 +258,20 @@ void PLAYER_NAME::move_warriors() {
 void PLAYER_NAME::move_car(const int &car_id) {}
 void PLAYER_NAME::move_warrior(const int &warrior_id) {}
 
-list<Dir> PLAYER_NAME::get_dir_from_dmap(const Pos &p, const dmap &m) {}
+list<Dir> PLAYER_NAME::get_dir_from_dmap(const Pos &p, const dmap &m) {
+    const int d = m[p.i][p.j];
+    list<Dir> l;
+    for (int i = 0; i < DirSize-1; ++i) {
+        const Pos p2 = p + Dir(i);
+        if (pos_ok(p2)) {
+            if (m[p2.i][p2.j] < d ) l.push_front(Dir(i));
+            else if (m[p2.i][p2.j] == d) l.push_back(Dir(i));
+        }
+    }
+    l.push_back(None);
+    return l;
+}
+
 void PLAYER_NAME::remove_unsafe_dirs(const Unit &u, list<Dir> &l) {}
 
 /**
