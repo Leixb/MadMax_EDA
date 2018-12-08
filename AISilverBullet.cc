@@ -53,6 +53,7 @@ struct PLAYER_NAME : public Player {
     map<int, Car_t> registered_cars;
 
     dmap movements;
+    dmap enemy_warriors;
 
     // Helper functions
 
@@ -63,6 +64,8 @@ struct PLAYER_NAME : public Player {
 
     typedef pair<int, Pos> fq_t;
     void compute_fuel_map(priority_queue<fq_t, vector<fq_t>, greater<fq_t> > &q);
+
+    void compute_enemy_warriors();
 
     list<Dir> get_dir_from_dmap(const Unit &u, const dmap &m);
     void remove_unsafe_dirs(const Unit &u, list<Dir> &l);
@@ -322,7 +325,45 @@ void PLAYER_NAME::explore_city(const Pos &_p, const int &city, queue<pair<Pos, i
     }
 }
 
+void PLAYER_NAME::compute_enemy_warriors() {
+    enemy_warriors = dmap(rows(), vector<int> (cols(), INF));
+
+    priority_queue<fq_t, vector<fq_t>, greater<fq_t> > q;
+
+    for (int i = 0; i < nb_players(); ++i) {
+        if (i == me()) continue;
+        for (const int &warrior_id : warriors(i)) {
+            const Unit u = unit(warrior_id);
+            if (cell(u.pos).type != City) q.emplace(0, u.pos);
+        }
+    }
+
+    while(!q.empty()) {
+        const int d = q.top().first;
+        const Pos p = q.top().second;
+        q.pop();
+
+        if (enemy_warriors[p.i][p.j] != INF) continue;
+        enemy_warriors[p.i][p.j]=d;
+
+        for (int i = 0; i < DirSize-1; ++i) {
+            const Pos p2 = p + Dir(i);
+            if (pos_ok(p2)) {
+                const CellType ct = cell(p2).type;
+
+                if (ct == Desert) q.emplace(d + nb_players(), p2);
+                else if (ct == Road) q.emplace(d + 1, p2);
+            }
+        }
+    }
+}
+
 void PLAYER_NAME::move_cars() {
+    compute_enemy_warriors();
+#ifdef DEBUG
+    LOG("-- ENEMY WARRIORS --")
+    show_dmap(enemy_warriors);
+#endif
     for (const int &car_id : cars(me()))
         if (can_move(car_id))
             move_car(car_id);
@@ -373,6 +414,13 @@ void PLAYER_NAME::move_car(const int &car_id) {
             return;
         }
         register_and_move(car_id, u.pos, l.front());
+    } else if (c.get_bit(Car_t::HUNT)) {
+        list<Dir> l = get_dir_from_dmap(u, enemy_warriors);
+        if (l.empty()) {
+            LOG("Cant hunt anyone" << car_id);
+            return;
+        }
+        register_and_move(car_id, u.pos, l.front());
     }
 }
 
@@ -380,7 +428,10 @@ void PLAYER_NAME::check_suplies(Car_t &c, const Unit &u) {
     const bool fuel = needs_fuel(u);
 
     if (c.get_bit(Car_t::FUELING)) {
-        if (!fuel) c.clear_bit(Car_t::FUELING);
+        if (!fuel) {
+            c.clear_bit(Car_t::FUELING);
+            c.clear_bit(Car_t::FOLLOW_DMAP);
+        }
     } else if (fuel) {
         LOG("Getting fuel")
         c.dmaps.push(&fuel_map);
@@ -396,8 +447,9 @@ bool PLAYER_NAME::needs_fuel(const Unit &u) {
 
 void PLAYER_NAME::assign_job(Car_t &c, const Pos &p) {
     //TODO: fix this so it does something with more sense
-    c.dmaps.push(&fuel_map);
-    c.set_bit(Car_t::FOLLOW_DMAP);
+    //c.dmaps.push(&fuel_map);
+    //c.set_bit(Car_t::FOLLOW_DMAP);
+    c.set_bit(Car_t::HUNT);
 }
 
 void PLAYER_NAME::move_warrior(const int &warrior_id) {
