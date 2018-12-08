@@ -32,6 +32,8 @@ struct PLAYER_NAME : public Player {
     const int INF=1e8;
 
     const char CITY_FIGHT_RATIO=75; // Percentatge of probability to win when taking fight
+    const char WATER_MARGIN=8;
+    const char FOOD_MARGIN=7;
 
     // Types
     struct Warrior_t;
@@ -49,6 +51,8 @@ struct PLAYER_NAME : public Player {
     map<int, Warrior_t> registered_warriors;
     map<int, Car_t> registered_cars;
 
+    dmap movements;
+
     // Helper functions
 
     void bfs(queue<pair<Pos, int> > &q, dmap &m, const bool &cross_city=false);
@@ -56,12 +60,21 @@ struct PLAYER_NAME : public Player {
     void explore_city(const Pos &p, const int &city, queue<pair<Pos, int> > &q);
     void map_nearest_city(queue<pair<Pos, int> > &q);
 
-    list<Dir> get_dir_from_dmap(const Pos &p, const dmap &m);
+    list<Dir> get_dir_from_dmap(const Unit &u, const dmap &m);
     void remove_unsafe_dirs(const Unit &u, list<Dir> &l);
 
     inline bool fight(const int &attacker_id, const int &victim_id);
     bool fight_desert(const Unit &attacker_id, const Unit &victim_id);
     inline bool fight_city(const Unit &attacker_id, const Unit &victim_id);
+
+    void assign_job(Warrior_t &w, const Pos &p);
+    void assign_job(Car_t &w, const Pos &p);
+
+    void check_suplies(Warrior_t &w, const Unit &u);
+    inline bool needs_water(const Unit &u);
+    inline bool needs_food(const Unit &u);
+
+    inline void register_and_move(const int &id, const Pos &p, const Dir &d);
 
     // Game routines
     void init();
@@ -86,7 +99,7 @@ struct PLAYER_NAME : public Player {
             for (int j=0; j < cols(); ++j) {
                 const int &v = m[i][j];
                 if (v == INF) cerr << "++";
-                else if (v == 0) cerr << "[]";
+                else if (v == -1) cerr << "[]";
                 else if (v < 10) cerr << ' ' << v;
                 else cerr << v;
                 cerr << ' ';
@@ -102,14 +115,15 @@ struct PLAYER_NAME::Warrior_t {
     enum state_t {
         NONE        =0,
         FOLLOW_DMAP =1<<0,
-        ATTACK      =1<<1,
-        HOLD        =1<<2
+        WATERING    =1<<1,
+        FEEDING     =1<<2
     };
     short state;
+    short last_seen;
 
     stack<dmap*> dmaps;
 
-    Warrior_t(): state(NONE) {};
+    Warrior_t(): state(NONE), last_seen(0) {};
 
     inline void set_bit(const state_t &bit) {
         state |= bit;
@@ -131,11 +145,12 @@ struct PLAYER_NAME::Car_t {
         HUNT        =1<<3
     };
     short state;
+    short last_seen;
 
     int unit_id; // For hunt
     stack<dmap*> dmaps;
 
-    Car_t(): state(HUNT|ATTACK) {};
+    Car_t(): state(HUNT|ATTACK), last_seen(0) {};
 
     inline void set_bit(const state_t &bit) {
         state |= bit;
@@ -149,14 +164,15 @@ struct PLAYER_NAME::Car_t {
 };
 
 void PLAYER_NAME::init() {
+    movements = dmap(rows(), vector<int> (cols(), -1));
     compute_maps();
 #ifdef DEBUG
     LOG("-- WATER_MAP --")
-    show_dmap(water_map);
+        show_dmap(water_map);
     LOG("-- FUEL_MAP --")
-    show_dmap(fuel_map);
+        show_dmap(fuel_map);
     LOG("-- NEAREST CITY MAP --")
-    show_dmap(nearest_city);
+        show_dmap(nearest_city);
     for (int i = 0; i < nb_cities(); ++i) {
         LOG("-- CITY " << i << " --");
         show_dmap(cities_map[i]);
@@ -177,8 +193,8 @@ void PLAYER_NAME::compute_maps() {
     for (int i=0; i < rows(); ++i) {
         for (int j=0; j < cols(); ++j) {
             const CellType ct = cell(Pos(i, j)).type;
-            if (ct == Water) w.emplace(Pos(i, j), 0);
-            else if (ct == Station) f.emplace(Pos(i, j), 0);
+            if (ct == Water) w.emplace(Pos(i, j), -1); //-1 since we cannot get into water
+            else if (ct == Station) f.emplace(Pos(i, j), -1);
             else if (ct == City) {
                 if (nearest_city[i][j] != INF) continue;
                 explore_city(Pos(i, j), city, cq[city]);
@@ -281,21 +297,117 @@ void PLAYER_NAME::move_warriors() {
         move_warrior(warrior_id);
 }
 
-void PLAYER_NAME::move_car(const int &car_id) {}
-void PLAYER_NAME::move_warrior(const int &warrior_id) {}
+void PLAYER_NAME::move_car(const int &car_id) { }
+void PLAYER_NAME::assign_job(Car_t &w, const Pos &p) { }
 
-list<Dir> PLAYER_NAME::get_dir_from_dmap(const Pos &p, const dmap &m) {
+void PLAYER_NAME::move_warrior(const int &warrior_id) {
+    Warrior_t &w = registered_warriors[warrior_id];
+    const Unit u = unit(warrior_id);
+
+    LOG("Warrior ID: " << warrior_id);
+
+    // If we haven't seen him for 4(nb_players) rounds he has died and respawned
+    if (w.last_seen+nb_players() < round()) {
+        w = Warrior_t();
+    }
+
+    w.last_seen = round();
+
+    LOG("state: " << w.state << ' ' << Warrior_t::NONE);
+
+    if (w.state == Warrior_t::NONE) assign_job(w, u.pos);
+
+    check_suplies(w, u);
+
+    if (w.get_bit(Warrior_t::FOLLOW_DMAP)) {
+        if (w.dmaps.empty()) {
+            LOG("Empty dmap Stack for id: " << warrior_id)
+                return;
+        }
+
+        dmap &m = *w.dmaps.top();
+
+        // Empty (except last) dmap stack if we reached our destinations
+        while (w.dmaps.size() > 1 and m[u.pos.i][u.pos.j]==0) {
+            w.dmaps.pop();
+            m = *w.dmaps.top();
+        }
+
+        list<Dir> l = get_dir_from_dmap(u, m);
+        if (l.empty()) {
+            LOG("No safe moves " << warrior_id);
+            return;
+        }
+        register_and_move(warrior_id, u.pos, l.front());
+    }
+}
+
+void PLAYER_NAME::check_suplies(Warrior_t &w, const Unit &u) {
+
+    bool wat = needs_water(u), food = needs_food(u);
+
+    if (w.get_bit(Warrior_t::WATERING)) {
+        if (!wat) w.clear_bit(Warrior_t::WATERING);
+    } else if (wat) {
+        LOG("WATER NEEDED")
+        w.dmaps.push(&water_map);
+        w.set_bit(Warrior_t::WATERING);
+    }
+
+    if (w.get_bit(Warrior_t::FEEDING)) {
+        if (!food) w.clear_bit(Warrior_t::FEEDING);
+    } else if (food) {
+        LOG("FOOD NEEDED")
+        w.dmaps.push(&cities_map[nearest_city[u.pos.i][u.pos.j]]);
+        w.set_bit(Warrior_t::FEEDING);
+    }
+}
+
+bool PLAYER_NAME::needs_water(const Unit &u) {
+    const int d = water_map[u.pos.i][u.pos.j];
+    return u.water - WATER_MARGIN < d;
+}
+
+bool PLAYER_NAME::needs_food(const Unit &u) {
+    const int c = nearest_city[u.pos.i][u.pos.j];
+    const int d = cities_map[c][u.pos.i][u.pos.j];
+    return u.food - FOOD_MARGIN < d;
+}
+
+void PLAYER_NAME::register_and_move(const int &id, const Pos &p, const Dir &d) {
+    const Pos p2 = p + d;
+    movements[p2.i][p2.j] = round();
+    command(id, d);
+}
+
+void PLAYER_NAME::assign_job(Warrior_t &w, const Pos &p) {
+    LOG("JOB ASSIGNMENT");
+    if (random(0, 1) == 1) {
+        const int city = nearest_city[p.i][p.j];
+        w.dmaps.push(&cities_map[city]);
+    } else {
+        LOG("ASSIGNING RANDOM CITY")
+        w.dmaps.push(&cities_map[random(0, nb_cities()-1)]);
+    }
+    w.set_bit(Warrior_t::FOLLOW_DMAP);
+}
+
+list<Dir> PLAYER_NAME::get_dir_from_dmap(const Unit &u, const dmap &m) {
+    const Pos p = u.pos;
     const int d = m[p.i][p.j];
-    list<Dir> l;
-    for (int i = 0; i < DirSize-1; ++i) {
+    list<Dir> ls, eq;
+    for (const int &i : random_permutation(DirSize-1)) {
         const Pos p2 = p + Dir(i);
         if (pos_ok(p2)) {
-            if (m[p2.i][p2.j] < d ) l.push_front(Dir(i));
-            else if (m[p2.i][p2.j] == d) l.push_back(Dir(i));
+            if (m[p2.i][p2.j] < d ) ls.push_back(Dir(i));
+            else if (m[p2.i][p2.j] == d) eq.push_back(Dir(i));
         }
     }
-    l.push_back(None);
-    return l;
+    remove_unsafe_dirs(u, ls);
+    if (!ls.empty()) return ls;
+
+    remove_unsafe_dirs(u, eq);
+    return eq;
 }
 
 void PLAYER_NAME::remove_unsafe_dirs(const Unit &u, list<Dir> &l) {
@@ -303,16 +415,16 @@ void PLAYER_NAME::remove_unsafe_dirs(const Unit &u, list<Dir> &l) {
     while (it != l.end()) {
         const Pos p = u.pos + *it;
         const int u_id = cell(p).id;
-        bool del = false;
-        if (u_id != -1) {
+        bool del = movements[p.i][p.j] == round();
+        if (!del and u_id != -1) {
             if (unit(u_id).player == me()) del=true;
             else del = !fight(u.id, u_id);
         }
         if (!del) {
             for (int i = 0; i < DirSize-1; ++i) {
                 const Pos p2 = p + Dir(i);
-                const int u_id2 = cell(p2).id;
                 if (pos_ok(p2)) {
+                    const int u_id2 = cell(p2).id;
                     if (u_id2 != -1) {
                         if (unit(u_id2).player != me())
                             del=!fight(u_id2, u.id);
