@@ -42,7 +42,7 @@ struct PLAYER_NAME : public Player {
     typedef vector<vector<int> > dmap;
 
     // Global attributes
-    dmap water_map, fuel_map;
+    dmap water_map, fuel_map, fuel_map_empty;
 
     dmap nearest_city;
     vector<dmap> cities_map;
@@ -59,6 +59,9 @@ struct PLAYER_NAME : public Player {
     void compute_maps();
     void explore_city(const Pos &p, const int &city, queue<pair<Pos, int> > &q);
     void map_nearest_city(queue<pair<Pos, int> > &q);
+
+    typedef pair<int, Pos> fq_t;
+    void compute_fuel_map(priority_queue<fq_t, vector<fq_t>, greater<fq_t> > &q);
 
     list<Dir> get_dir_from_dmap(const Unit &u, const dmap &m);
     void remove_unsafe_dirs(const Unit &u, list<Dir> &l);
@@ -169,6 +172,8 @@ void PLAYER_NAME::init() {
 #ifdef DEBUG
     LOG("-- WATER_MAP --")
         show_dmap(water_map);
+    LOG("-- FUEL_MAP EMPTY --")
+        show_dmap(fuel_map_empty);
     LOG("-- FUEL_MAP --")
         show_dmap(fuel_map);
     LOG("-- NEAREST CITY MAP --")
@@ -183,6 +188,8 @@ void PLAYER_NAME::init() {
 void PLAYER_NAME::compute_maps() {
     queue<pair<Pos, int> > w, f; // water & fuel queues
 
+    priority_queue<fq_t, vector<fq_t>, greater<fq_t> > fq;
+
     vector<queue<pair<Pos, int> > > cq(nb_cities());
     nearest_city = dmap(rows(), vector<int> (cols(), INF));
     cities_map = vector<dmap> (nb_cities(), dmap(rows(), vector<int> (cols(), INF)));
@@ -194,8 +201,10 @@ void PLAYER_NAME::compute_maps() {
         for (int j=0; j < cols(); ++j) {
             const CellType ct = cell(Pos(i, j)).type;
             if (ct == Water) w.emplace(Pos(i, j), -1); //-1 since we cannot get into water
-            else if (ct == Station) f.emplace(Pos(i, j), -1);
-            else if (ct == City) {
+            else if (ct == Station) {
+                f.emplace(Pos(i, j), -1);  // pari<Pos, int>
+                fq.emplace(-1, Pos(i, j)); // pair<int, Pos>
+            } else if (ct == City) {
                 if (nearest_city[i][j] != INF) continue;
                 explore_city(Pos(i, j), city, cq[city]);
                 ++city;
@@ -205,8 +214,10 @@ void PLAYER_NAME::compute_maps() {
 
     LOG("FOUND " << city << "/" << nb_cities() << " cities ");
 
+    compute_fuel_map(fq);
+
     bfs(w, water_map, true);
-    bfs(f, fuel_map, false);
+    bfs(f, fuel_map_empty, false);
 
     queue<pair<Pos, int> > ncq; // nearest_city queue
 
@@ -216,6 +227,29 @@ void PLAYER_NAME::compute_maps() {
     }
 
     map_nearest_city(ncq);
+}
+
+void PLAYER_NAME::compute_fuel_map(priority_queue<fq_t, vector<fq_t>, greater<fq_t> > &q) {
+    fuel_map = dmap(rows(), vector<int>(cols(), INF));
+    while(!q.empty()) {
+        const int d = q.top().first;
+        const Pos p = q.top().second;
+        q.pop();
+
+        if (fuel_map[p.i][p.j] != INF) continue;
+        fuel_map[p.i][p.j]=d;
+
+        for (int i = 0; i < DirSize-1; ++i) {
+            const Pos p2 = p + Dir(i);
+            if (pos_ok(p2)) {
+                const CellType ct = cell(p2).type;
+
+                if (d == -1) q.emplace(0, p2);
+                else if (ct == Desert) q.emplace(d + nb_players(), p2);
+                else if (ct == Road) q.emplace(d + 1, p2);
+            }
+        }
+    }
 }
 
 void PLAYER_NAME::map_nearest_city(queue<pair<Pos, int> > &q) {
