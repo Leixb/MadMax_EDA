@@ -202,7 +202,7 @@ void PLAYER_NAME::compute_maps() {
             const CellType ct = cell(Pos(i, j)).type;
             if (ct == Water) w.emplace(Pos(i, j), -1); //-1 since we cannot get into water
             else if (ct == Station) {
-                f.emplace(Pos(i, j), -1);  // pari<Pos, int>
+                f.emplace(Pos(i, j), -1);  // pair<Pos, int>
                 fq.emplace(-1, Pos(i, j)); // pair<int, Pos>
             } else if (ct == City) {
                 if (nearest_city[i][j] != INF) continue;
