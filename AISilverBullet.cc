@@ -526,7 +526,7 @@ void PLAYER_NAME::remove_unsafe_dirs(const Unit &u, list<Dir> &l) {
                     const int u_id2 = cell(p2).id;
                     if (u_id2 != -1) {
                         if (unit(u_id2).player != me())
-                            del=!fight(u_id2, u.id);
+                            del=fight(u_id2, u.id);
                     }
                 }
             }
