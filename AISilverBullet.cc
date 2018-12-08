@@ -34,6 +34,7 @@ struct PLAYER_NAME : public Player {
     const char CITY_FIGHT_RATIO=75; // Percentatge of probability to win when taking fight
     const char WATER_MARGIN=8;
     const char FOOD_MARGIN=7;
+    const char FUEL_MARGIN=7;
 
     // Types
     struct Warrior_t;
@@ -71,11 +72,14 @@ struct PLAYER_NAME : public Player {
     inline bool fight_city(const Unit &attacker_id, const Unit &victim_id);
 
     void assign_job(Warrior_t &w, const Pos &p);
-    void assign_job(Car_t &w, const Pos &p);
+    void assign_job(Car_t &c, const Pos &p);
 
     void check_suplies(Warrior_t &w, const Unit &u);
     inline bool needs_water(const Unit &u);
     inline bool needs_food(const Unit &u);
+
+    void check_suplies(Car_t &c, const Unit &u);
+    inline bool needs_fuel(const Unit &u);
 
     inline void register_and_move(const int &id, const Pos &p, const Dir &d);
 
@@ -144,7 +148,7 @@ struct PLAYER_NAME::Car_t {
         NONE        =0,
         FOLLOW_DMAP =1<<0,
         ATTACK      =1<<1,
-        PATROL      =1<<2,
+        FUELING     =1<<2,
         HUNT        =1<<3
     };
     short state;
@@ -331,8 +335,70 @@ void PLAYER_NAME::move_warriors() {
         move_warrior(warrior_id);
 }
 
-void PLAYER_NAME::move_car(const int &car_id) { }
-void PLAYER_NAME::assign_job(Car_t &w, const Pos &p) { }
+void PLAYER_NAME::move_car(const int &car_id) {
+    Car_t &c = registered_cars[car_id];
+    const Unit u = unit(car_id);
+
+    LOG("Car ID:" << car_id)
+
+    // If we haven't seen him for 4(nb_players) rounds he has died and respawned
+    if (c.last_seen+nb_players() < round()) {
+        LOG("RESPAWNED")
+        c = Car_t();
+    }
+
+    c.last_seen = round();
+
+    if (c.state == Car_t::NONE) assign_job(c, u.pos);
+
+    check_suplies(c, u);
+
+    if (c.get_bit(Car_t::FOLLOW_DMAP)) {
+        if (c.dmaps.empty()) {
+            LOG("Empty dmap Stack for id: " << car_id)
+                return;
+        }
+
+        dmap &m = *c.dmaps.top();
+
+        // Empty (except last) dmap stack if we reached our destinations
+        while (c.dmaps.size() > 1 and m[u.pos.i][u.pos.j]==0) {
+            c.dmaps.pop();
+            m = *c.dmaps.top();
+        }
+
+        list<Dir> l = get_dir_from_dmap(u, m);
+        if (l.empty()) {
+            LOG("No safe moves " << car_id);
+            return;
+        }
+        register_and_move(car_id, u.pos, l.front());
+    }
+}
+
+void PLAYER_NAME::check_suplies(Car_t &c, const Unit &u) {
+    const bool fuel = needs_fuel(u);
+
+    if (c.get_bit(Car_t::FUELING)) {
+        if (!fuel) c.clear_bit(Car_t::FUELING);
+    } else if (fuel) {
+        LOG("Getting fuel")
+        c.dmaps.push(&fuel_map);
+        c.set_bit(Car_t::FUELING);
+        c.set_bit(Car_t::FOLLOW_DMAP);
+    }
+}
+
+bool PLAYER_NAME::needs_fuel(const Unit &u) {
+    const int d = fuel_map[u.pos.i][u.pos.j];
+    return u.food - FUEL_MARGIN < d;
+}
+
+void PLAYER_NAME::assign_job(Car_t &c, const Pos &p) {
+    //TODO: fix this so it does something with more sense
+    c.dmaps.push(&fuel_map);
+    c.set_bit(Car_t::FOLLOW_DMAP);
+}
 
 void PLAYER_NAME::move_warrior(const int &warrior_id) {
     Warrior_t &w = registered_warriors[warrior_id];
@@ -377,7 +443,6 @@ void PLAYER_NAME::move_warrior(const int &warrior_id) {
 }
 
 void PLAYER_NAME::check_suplies(Warrior_t &w, const Unit &u) {
-
     bool wat = needs_water(u), food = needs_food(u);
 
     if (w.get_bit(Warrior_t::WATERING)) {
