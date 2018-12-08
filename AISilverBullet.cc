@@ -110,6 +110,16 @@ struct PLAYER_NAME::Warrior_t {
     stack<dmap*> dmaps;
 
     Warrior_t(): state(NONE) {};
+
+    inline void set_bit(const state_t &bit) {
+        state |= bit;
+    }
+    inline void clear_bit(const state_t &bit) {
+        if (get_bit(bit)) state ^= bit;
+    }
+    inline bool get_bit(const state_t &bit) {
+        return state & bit;
+    }
 };
 
 struct PLAYER_NAME::Car_t {
@@ -126,6 +136,16 @@ struct PLAYER_NAME::Car_t {
     stack<dmap*> dmaps;
 
     Car_t(): state(HUNT|ATTACK) {};
+
+    inline void set_bit(const state_t &bit) {
+        state |= bit;
+    }
+    inline void clear_bit(const state_t &bit) {
+        if (get_bit(bit)) state ^= bit;
+    }
+    inline bool get_bit(const state_t &bit) {
+        return state & bit;
+    }
 };
 
 void PLAYER_NAME::init() {
