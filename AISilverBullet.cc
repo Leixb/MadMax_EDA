@@ -343,11 +343,11 @@ void PLAYER_NAME::move_car(const int &car_id) {
 
     LOG("Car ID:" << car_id)
 
-    // If we haven't seen him for 4(nb_players) rounds he has died and respawned
-    if (c.last_seen+nb_players() < round()) {
-        LOG("RESPAWNED")
-        c = Car_t();
-    }
+        // If we haven't seen him for 4(nb_players) rounds he has died and respawned
+        if (c.last_seen+nb_players() < round()) {
+            LOG("RESPAWNED")
+                c = Car_t();
+        }
 
     c.last_seen = round();
 
@@ -398,7 +398,7 @@ void PLAYER_NAME::move_car(const int &car_id) {
 
         if (l.empty()) {
             LOG("NO SAFE MOVES FOR CAR")
-            return;
+                return;
         }
 
         const Dir dr = get_dir_to_warrior(l, u.pos);
@@ -466,7 +466,7 @@ void PLAYER_NAME::check_suplies(Car_t &c, const Unit &u) {
         }
     } else if (fuel) {
         LOG("Getting fuel")
-        c.dmaps.push(&fuel_map);
+            c.dmaps.push(&fuel_map);
         c.set_bit(Car_t::FUELING);
         c.set_bit(Car_t::FOLLOW_DMAP);
     }
@@ -493,7 +493,7 @@ void PLAYER_NAME::move_warrior(const int &warrior_id) {
     // If we haven't seen him for 4(nb_players) rounds he has died and respawned
     if (w.last_seen+nb_players() < round()) {
         LOG("RESPAWNED")
-        w = Warrior_t();
+            w = Warrior_t();
     }
 
     w.last_seen = round();
@@ -541,7 +541,7 @@ void PLAYER_NAME::check_suplies(Warrior_t &w, const Unit &u) {
         if (!wat) w.clear_bit(Warrior_t::WATERING);
     } else if (wat) {
         LOG("WATER NEEDED")
-        w.dmaps.push(&water_map);
+            w.dmaps.push(&water_map);
         w.set_bit(Warrior_t::WATERING);
     }
 
@@ -549,7 +549,7 @@ void PLAYER_NAME::check_suplies(Warrior_t &w, const Unit &u) {
         if (!food) w.clear_bit(Warrior_t::FEEDING);
     } else if (food) {
         LOG("FOOD NEEDED")
-        w.dmaps.push(&cities_map[nearest_city[u.pos.i][u.pos.j]]);
+            w.dmaps.push(&cities_map[nearest_city[u.pos.i][u.pos.j]]);
         w.set_bit(Warrior_t::FEEDING);
     }
 }
@@ -574,11 +574,11 @@ void PLAYER_NAME::register_and_move(const int &id, const Pos &p, const Dir &d) {
 void PLAYER_NAME::assign_job(Warrior_t &w, const Pos &p) {
     LOG("JOB ASSIGNMENT");
     //if (random(0, 1) == 1) {
-        const int city = nearest_city[p.i][p.j];
-        w.dmaps.push(&cities_map[city]);
+    const int city = nearest_city[p.i][p.j];
+    w.dmaps.push(&cities_map[city]);
     //} else {
-        //LOG("ASSIGNING RANDOM CITY")
-        //w.dmaps.push(&cities_map[random(0, nb_cities()-1)]);
+    //LOG("ASSIGNING RANDOM CITY")
+    //w.dmaps.push(&cities_map[random(0, nb_cities()-1)]);
     //}
     w.set_bit(Warrior_t::FOLLOW_DMAP);
 }
@@ -603,24 +603,24 @@ list<Dir> PLAYER_NAME::get_dir_from_dmap(const Unit &u, const dmap &m) {
 
 bool PLAYER_NAME::is_unsafe(const Unit &u, const Dir &dr) {
     const Pos p = u.pos + dr;
-        const int u_id = cell(p).id;
-        if (movements[p.i][p.j] == round()) return true;
-        if (u_id != -1) {
-            if (unit(u_id).player == me()) return true;
-            return !fight(u.id, u_id);
-        }
-        for (int i = 0; i < DirSize-1; ++i) {
-            const Pos p2 = p + Dir(i);
-            if (!pos_ok(p2)) continue;
+    const int u_id = cell(p).id;
+    if (movements[p.i][p.j] == round()) return true;
+    if (u_id != -1) {
+        if (unit(u_id).player == me()) return true;
+        return !fight(u.id, u_id);
+    }
+    for (int i = 0; i < DirSize-1; ++i) {
+        const Pos p2 = p + Dir(i);
+        if (!pos_ok(p2)) continue;
 
-            const int u_id2 = cell(p2).id;
-            if (u_id2 == -1) continue;
+        const int u_id2 = cell(p2).id;
+        if (u_id2 == -1) continue;
 
-            if (unit(u_id2).player != me())
-                // cheap fix for Car vs Car bug
-                return unit(u_id2).type == Car or fight(u_id2, u.id);
-        }
-        return false;
+        if (unit(u_id2).player != me())
+            // cheap fix for Car vs Car bug
+            return unit(u_id2).type == Car or fight(u_id2, u.id);
+    }
+    return false;
 }
 
 void PLAYER_NAME::remove_unsafe_dirs(const Unit &u, list<Dir> &l) {
