@@ -616,9 +616,13 @@ bool PLAYER_NAME::is_unsafe(const Unit &u, const Dir &dr) {
         const int u_id2 = cell(p2).id;
         if (u_id2 == -1) continue;
 
-        if (unit(u_id2).player != me())
+        if (unit(u_id2).player != me()) {
+            // If moving inside city and menaced by car, we ok
+            if (unit(u_id2).type == Car and cell(p).type == City)
+                continue;
             // cheap fix for Car vs Car bug
             return unit(u_id2).type == Car or fight(u_id2, u.id);
+        }
     }
     return false;
 }
@@ -652,6 +656,7 @@ bool PLAYER_NAME::fight_desert(const Unit &attacker, const Unit &victim) {
 }
 
 bool PLAYER_NAME::fight_city(const Unit &attacker, const Unit &victim) {
+    if (attacker.type == Car) return false; // Cannot move into victim
     return attacker.water*100/(attacker.water + victim.water) >= CITY_FIGHT_RATIO;
 }
 
