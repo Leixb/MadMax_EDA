@@ -485,6 +485,7 @@ void PLAYER_NAME::move_warrior(const int &warrior_id) {
 
     // If we haven't seen him for 4(nb_players) rounds he has died and respawned
     if (w.last_seen+nb_players() < round()) {
+        LOG("RESPAWNED")
         w = Warrior_t();
     }
 
@@ -558,13 +559,13 @@ void PLAYER_NAME::register_and_move(const int &id, const Pos &p, const Dir &d) {
 
 void PLAYER_NAME::assign_job(Warrior_t &w, const Pos &p) {
     LOG("JOB ASSIGNMENT");
-    if (random(0, 1) == 1) {
+    //if (random(0, 1) == 1) {
         const int city = nearest_city[p.i][p.j];
         w.dmaps.push(&cities_map[city]);
-    } else {
-        LOG("ASSIGNING RANDOM CITY")
-        w.dmaps.push(&cities_map[random(0, nb_cities()-1)]);
-    }
+    //} else {
+        //LOG("ASSIGNING RANDOM CITY")
+        //w.dmaps.push(&cities_map[random(0, nb_cities()-1)]);
+    //}
     w.set_bit(Warrior_t::FOLLOW_DMAP);
 }
 
