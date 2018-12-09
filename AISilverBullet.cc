@@ -371,8 +371,15 @@ void PLAYER_NAME::move_car(const int &car_id) {
 
         list<Dir> l = get_dir_from_dmap(u, m);
         if (l.empty()) {
-            LOG("No safe moves " << car_id);
-            return;
+            for (const int &i : random_permutation(DirSize-1)) {
+                if (!pos_ok(u.pos + Dir(i))) continue;
+                l.push_back(Dir(i));
+            }
+            remove_unsafe_dirs(u, l);
+            if (l.empty()) {
+                LOG("No safe moves " << car_id);
+                return;
+            }
         }
         register_and_move(car_id, u.pos, l.front());
     } else if (c.get_bit(Car_t::HUNT)) {
@@ -513,8 +520,15 @@ void PLAYER_NAME::move_warrior(const int &warrior_id) {
 
         list<Dir> l = get_dir_from_dmap(u, m);
         if (l.empty()) {
-            LOG("No safe moves " << warrior_id);
-            return;
+            for (const int &i : random_permutation(DirSize-1)) {
+                if (!pos_ok(u.pos + Dir(i))) continue;
+                l.push_back(Dir(i));
+            }
+            remove_unsafe_dirs(u, l);
+            if (l.empty()) {
+                LOG("No safe moves " << warrior_id);
+                return;
+            }
         }
         register_and_move(warrior_id, u.pos, l.front());
     }
