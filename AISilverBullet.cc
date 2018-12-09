@@ -67,6 +67,7 @@ struct PLAYER_NAME : public Player {
 
     list<Dir> get_dir_from_dmap(const Unit &u, const dmap &m);
     void remove_unsafe_dirs(const Unit &u, list<Dir> &l);
+    bool is_unsafe(const Unit &u, const Dir &dr);
 
     inline bool fight(const int &attacker_id, const int &victim_id);
     bool fight_desert(const Unit &attacker_id, const Unit &victim_id);
@@ -585,29 +586,32 @@ list<Dir> PLAYER_NAME::get_dir_from_dmap(const Unit &u, const dmap &m) {
     return eq;
 }
 
+bool PLAYER_NAME::is_unsafe(const Unit &u, const Dir &dr) {
+    const Pos p = u.pos + dr;
+        const int u_id = cell(p).id;
+        if (movements[p.i][p.j] == round()) return true;
+        if (u_id != -1) {
+            if (unit(u_id).player == me()) return true;
+            return !fight(u.id, u_id);
+        }
+        for (int i = 0; i < DirSize-1; ++i) {
+            const Pos p2 = p + Dir(i);
+            if (!pos_ok(p2)) continue;
+
+            const int u_id2 = cell(p2).id;
+            if (u_id2 == -1) continue;
+
+            if (unit(u_id2).player != me())
+                // cheap fix for Car vs Car bug
+                return unit(u_id2).type == Car or fight(u_id2, u.id);
+        }
+        return false;
+}
+
 void PLAYER_NAME::remove_unsafe_dirs(const Unit &u, list<Dir> &l) {
     auto it = l.begin();
     while (it != l.end()) {
-        const Pos p = u.pos + *it;
-        const int u_id = cell(p).id;
-        bool del = movements[p.i][p.j] == round();
-        if (!del and u_id != -1) {
-            if (unit(u_id).player == me()) del=true;
-            else del = !fight(u.id, u_id);
-        }
-        if (!del) {
-            for (int i = 0; i < DirSize-1; ++i) {
-                const Pos p2 = p + Dir(i);
-                if (pos_ok(p2)) {
-                    const int u_id2 = cell(p2).id;
-                    if (u_id2 != -1) {
-                        if (unit(u_id2).player != me())
-                            del=fight(u_id2, u.id);
-                    }
-                }
-            }
-        }
-        if (del) it = l.erase(it);
+        if (is_unsafe(u, *it)) it = l.erase(it);
         else ++it;
     }
 }
