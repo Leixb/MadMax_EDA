@@ -247,13 +247,13 @@ void PLAYER_NAME::compute_fuel_map(priority_queue<fq_t, vector<fq_t>, greater<fq
 
         for (int i = 0; i < DirSize-1; ++i) {
             const Pos p2 = p + Dir(i);
-            if (pos_ok(p2)) {
-                const CellType ct = cell(p2).type;
+            if (!pos_ok(p2)) continue;
 
-                if (d == -1) q.emplace(0, p2);
-                else if (ct == Desert) q.emplace(d + nb_players(), p2);
-                else if (ct == Road) q.emplace(d + 1, p2);
-            }
+            const CellType ct = cell(p2).type;
+
+            if (d == -1) q.emplace(0, p2);
+            else if (ct == Desert) q.emplace(d + nb_players(), p2);
+            else if (ct == Road) q.emplace(d + 1, p2);
         }
     }
 }
@@ -269,10 +269,10 @@ void PLAYER_NAME::map_nearest_city(queue<pair<Pos, int> > &q) {
 
         for (int i = 0; i < DirSize-1; ++i) {
             const Pos p2 = p + Dir(i);
-            if (pos_ok(p2)) {
-                const CellType ct = cell(p2).type;
-                if (ct == Road or ct == Desert) q.emplace(p2, city);
-            }
+            if (!pos_ok(p2)) continue;
+
+            const CellType ct = cell(p2).type;
+            if (ct == Road or ct == Desert) q.emplace(p2, city);
         }
     }
 }
@@ -290,11 +290,11 @@ void PLAYER_NAME::bfs(queue<pair<Pos, int> > &q, dmap &m, const bool &cross_city
 
         for (int i = 0; i < DirSize-1; ++i) {
             const Pos p2 = p + Dir(i);
-            if (pos_ok(p2)) {
-                const CellType ct = cell(p2).type;
-                if (ct == Road or ct == Desert or (ct == City and cross_city))
-                    q.emplace(p2, d+1);
-            }
+            if (!pos_ok(p2)) continue;
+
+            const CellType ct = cell(p2).type;
+            if (ct == Road or ct == Desert or (ct == City and cross_city))
+                q.emplace(p2, d+1);
         }
     }
 }
@@ -314,11 +314,11 @@ void PLAYER_NAME::explore_city(const Pos &_p, const int &city, queue<pair<Pos, i
 
         for (int i = 0; i < DirSize-1; ++i) {
             const Pos p2 = p + Dir(i);
-            if (pos_ok(p2)) {
-                if (cell(p2).type == City) {
-                    Q.push(p2);
-                    q.emplace(p2, 0);
-                }
+            if (!pos_ok(p2)) continue;
+
+            if (cell(p2).type == City) {
+                Q.push(p2);
+                q.emplace(p2, 0);
             }
         }
     }
@@ -574,10 +574,10 @@ list<Dir> PLAYER_NAME::get_dir_from_dmap(const Unit &u, const dmap &m) {
     list<Dir> ls, eq;
     for (const int &i : random_permutation(DirSize-1)) {
         const Pos p2 = p + Dir(i);
-        if (pos_ok(p2)) {
-            if (m[p2.i][p2.j] < d ) ls.push_back(Dir(i));
-            else if (m[p2.i][p2.j] == d) eq.push_back(Dir(i));
-        }
+        if (!pos_ok(p2)) continue;
+
+        if (m[p2.i][p2.j] < d ) ls.push_back(Dir(i));
+        else if (m[p2.i][p2.j] == d) eq.push_back(Dir(i));
     }
     remove_unsafe_dirs(u, ls);
     if (!ls.empty()) return ls;
