@@ -279,6 +279,28 @@ void PLAYER_NAME::map_nearest_city(queue<pair<Pos, int> > &q) {
 
 void PLAYER_NAME::bfs(queue<pair<Pos, int> > &q, dmap &m, const bool &cross_city) {
     m = dmap(rows(), vector<int>(cols(), INF));
+
+    // Move all -1 to borders without using diagonal moves (they dont refill)
+
+    while(!q.empty()) {
+        const Pos p = q.front().first;
+        if (q.front().second != -1) break;
+        q.pop();
+
+        m[p.i][p.j] = -1;
+
+        for (Dir i : {Bottom, Right, Top, Left}) {
+            const Pos p2 = p + Dir(i);
+            if (!pos_ok(p2)) continue;
+
+            const CellType ct = cell(p2).type;
+            if (ct == Road or ct == Desert or (ct == City and cross_city))
+                q.emplace(p2, 0);
+        }
+    }
+
+    // We can start now
+
     while(!q.empty()) {
         const Pos p = q.front().first;
         const int d = q.front().second;
@@ -607,7 +629,7 @@ bool PLAYER_NAME::is_unsafe(const Unit &u, const Dir &dr) {
     if (movements[p.i][p.j] == round()) return true;
     if (u_id != -1) {
         if (unit(u_id).player == me()) return true;
-        return !fight(u.id, u_id);
+        if (!fight(u.id, u_id)) return true;
     }
     for (int i = 0; i < DirSize-1; ++i) {
         const Pos p2 = p + Dir(i);
@@ -621,7 +643,8 @@ bool PLAYER_NAME::is_unsafe(const Unit &u, const Dir &dr) {
             if (unit(u_id2).type == Car and cell(p).type == City)
                 continue;
             // cheap fix for Car vs Car bug
-            return unit(u_id2).type == Car or fight(u_id2, u.id);
+            if (unit(u_id2).type == Car or fight(u_id2, u.id))
+                return true;
         }
     }
     return false;
