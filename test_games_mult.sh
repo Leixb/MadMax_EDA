@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
 
 GAMES=${1:-10}
-PNAME=${2:-SilverBullet}
-RESULT_FOLDER=${3:-tests}
+RESULT_FOLDER=${2:-tests}
+PNAME=${3:-SilverBullet}
+P2=${4:-Dummy}
+P3=${5:-Dummy}
+P4=${6:-Dummy}
+
+PVERSION=$(md5sum AI$PNAME.cc | cut -d' ' -f1)
 
 mkdir -p $RESULT_FOLDER
+mkdir -p $RESULT_FOLDER/bk
+mv $RESULT_FOLDER/*.{txt,res} $RESULT_FOLDER/bk
 CONT=0
 
 for (( i = 0; i < $GAMES; i++ )); do
     SEED=$(shuf -i 0-2147483647 -n 1)
     printf -v PSEED "%010d" $SEED
-    RESULT=$(./Game $PNAME Dummy Dummy Dummy -s $SEED -i default.cnf -o ${RESULT_FOLDER}/$PSEED.res 2>&1 >/dev/null | tee ${RESULT_FOLDER}/$PSEED | tail -n 2 | head -n 1 | cut -d' ' -f 3)
+    RESULT=$(./Game $PNAME $P2 $P3 $P4 -s $SEED -i default.cnf -o ${RESULT_FOLDER}/$PSEED.res 2>&1 >/dev/null | tee ${RESULT_FOLDER}/$PSEED | tail -n 2 | head -n 1 | cut -d' ' -f 3)
     echo "GAME $((i+1)) of $GAMES: SEED: $SEED. WINNER: $RESULT"
     if [ "$RESULT" = "$PNAME" ]; then
         mv "${RESULT_FOLDER}/$PSEED.res" "${RESULT_FOLDER}/W_$PSEED.res"
