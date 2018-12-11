@@ -52,6 +52,7 @@ struct PLAYER_NAME : public Player {
     map<int, Car_t> registered_cars;
 
     dmap movements;
+    dmap enemy_cars;
 
     // Helper functions
 
@@ -69,6 +70,9 @@ struct PLAYER_NAME : public Player {
     list<Dir> get_dir_from_dmap(const Unit &u, const dmap &m);
     void remove_unsafe_dirs(const Unit &u, list<Dir> &l);
     bool is_unsafe(const Unit &u, const Dir &dr);
+
+    void mark_enemy_cars();
+    void mark_car_reach(const Pos &p, const int &depth=5);
 
     inline bool fight(const int &attacker_id, const int &victim_id);
     bool fight_desert(const Unit &attacker_id, const Unit &victim_id);
@@ -110,8 +114,8 @@ struct PLAYER_NAME : public Player {
                 const int &v = m[i][j];
                 if (v == INF) cerr << "++";
                 else if (v == -1) cerr << "[]";
-                else if (v < 10) cerr << ' ' << v;
-                else cerr << v;
+                else if (v%100 < 10) cerr << ' ' << v%100;
+                else cerr << v%100;
                 cerr << ' ';
             }
             cerr << endl;
@@ -175,6 +179,7 @@ struct PLAYER_NAME::Car_t {
 
 void PLAYER_NAME::init() {
     movements = dmap(rows(), vector<int> (cols(), -1));
+    enemy_cars = dmap(rows(), vector<int> (cols(), -1));
     compute_maps();
 #ifdef DEBUG
     LOG("-- WATER_MAP --")
@@ -234,6 +239,42 @@ void PLAYER_NAME::compute_maps() {
     }
 
     map_nearest_city(ncq);
+}
+
+void PLAYER_NAME::mark_enemy_cars() {
+    for(const int &player : random_permutation(nb_players()-1)) {
+        if (player == me()) continue;
+        for (const int &car_id : cars(player)) {
+            mark_car_reach(unit(car_id).pos);
+        }
+    }
+}
+
+
+void PLAYER_NAME::mark_car_reach(const Pos &p, const int &depth) {
+
+    priority_queue<pair<int, Pos> > q;
+    q.emplace(0, p);
+    while (!q.empty()) {
+        const int d = q.top().first;
+        const Pos p = q.top().second;
+        q.pop();
+
+        if (d > depth) continue;
+
+        if (enemy_cars[p.i][p.j] == round()) continue;
+        enemy_cars[p.i][p.j] = round();
+
+        for (int i = 0; i < DirSize-1; ++i) {
+            const Pos p2 = p + Dir(i);
+            if (!pos_ok(p2)) continue;
+
+            const CellType ct = cell(p2).type;
+
+            if (ct == Desert) q.emplace(d + nb_players(), p2);
+            else if (ct == Road) q.emplace(d + 1, p2);
+        }
+    }
 }
 
 void PLAYER_NAME::compute_fuel_map(priority_queue<fq_t, vector<fq_t>, greater<fq_t> > &q) {
@@ -354,7 +395,14 @@ void PLAYER_NAME::move_cars() {
 }
 
 void PLAYER_NAME::move_warriors() {
-    if (round()% 4 != me()) return; // This line makes a lot of sense.
+    if (round()%nb_players() != me()) return; // This line makes a lot of sense.
+
+    mark_enemy_cars();
+
+#ifdef DEBUG
+    LOG("-- ENEMY CARS --")
+    show_dmap(enemy_cars);
+#endif
 
     for (const int &warrior_id : warriors(me()))
         move_warrior(warrior_id);
@@ -644,6 +692,9 @@ bool PLAYER_NAME::is_unsafe(const Unit &u, const Dir &dr) {
     const Pos p = u.pos + dr;
     const int u_id = cell(p).id;
     if (movements[p.i][p.j] == round()) return true;
+
+    if (u.type == Warrior and enemy_cars[p.i][p.j] == round()) return true;
+
     if (u_id != -1) {
         if (unit(u_id).player == me()) return true;
         if (!fight(u.id, u_id)) return true;
