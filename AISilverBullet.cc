@@ -756,4 +756,4 @@ bool PLAYER_NAME::fight_city(const Unit &attacker, const Unit &victim) {
  */
 RegisterPlayer(PLAYER_NAME);
 
-// vim:sw=4:ts=4:et:foldmethod=indent:
+// vim:sw=4:ts=4:et:foldmethod=indent:foldlevel=20:
