@@ -11,7 +11,7 @@
  * Write the name of your player and save this file
  * with the same name and .cc extension.
  */
-#define PLAYER_NAME Silv3rBullet
+#define PLAYER_NAME Silv3rBull3t
 
 struct PLAYER_NAME : public Player {
 
@@ -610,6 +610,8 @@ void PLAYER_NAME::assign_city(Warrior_t &w, const Pos &p) {
             if (cell(cities[i][0]).owner != me()) return;
         }
     }
+    LOG("No suitable cities found");
+    w.city = random(0, nb_cities()-1);
 }
 
 list<Dir> PLAYER_NAME::get_dir_from_dmap(const Unit &u, const dmap &m) {
