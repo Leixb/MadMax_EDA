@@ -11,7 +11,7 @@
  * Write the name of your player and save this file
  * with the same name and .cc extension.
  */
-#define PLAYER_NAME SilverBullet
+#define PLAYER_NAME Silv3rBullet
 
 struct PLAYER_NAME : public Player {
 
@@ -31,9 +31,16 @@ struct PLAYER_NAME : public Player {
     const int INF=1e8;
 
     const char CITY_FIGHT_RATIO=75; // Percentatge of probability to win when taking fight
-    const char WATER_MARGIN=8;
+    const char WATER_MARGIN_LOW=8,
+          WATER_MARGIN_HIG=25;
     const char FOOD_MARGIN=7;
     const char FUEL_MARGIN=7;
+    const char MOVE_OUT_LIMIT=3;
+
+    const bool ASSIGN_RANDOM=false,
+          AVOID_ENEMY_CARS=false,
+          LEAVE_CITY=false,
+          RANDOMIZE_WATER_TIME=false;
 
     // Types
     struct Warrior_t;
@@ -54,12 +61,18 @@ struct PLAYER_NAME : public Player {
     dmap movements;
     dmap enemy_cars;
 
+    vector<vector<int> > warriors_player_city;
+    vector<int> warriors_movable;
+
     // Helper functions
 
     void bfs(queue<pair<Pos, int> > &q, dmap &m, const bool &cross_city=false);
     void compute_maps();
     void explore_city(const Pos &p, const int &city, queue<pair<Pos, int> > &q);
     void map_nearest_city(queue<pair<Pos, int> > &q);
+
+    void compute_warriors_city();
+    void compute_warriors_movable();
 
     inline dmap &nearest_city_dmap(const Pos &p);
 
@@ -78,8 +91,7 @@ struct PLAYER_NAME : public Player {
     bool fight_desert(const Unit &attacker_id, const Unit &victim_id);
     inline bool fight_city(const Unit &attacker_id, const Unit &victim_id);
 
-    void assign_job(Warrior_t &w, const Pos &p);
-    void assign_job(Car_t &c, const Pos &p);
+    void assign_city(Warrior_t &w, const Pos &p);
 
     void check_suplies(Warrior_t &w, const Unit &u);
     inline bool needs_water(const Unit &u);
@@ -126,55 +138,20 @@ struct PLAYER_NAME : public Player {
 };
 
 struct PLAYER_NAME::Warrior_t {
-    enum state_t {
-        NONE        =0,
-        FOLLOW_DMAP =1<<0,
-        WATERING    =1<<1,
-        FEEDING     =1<<2
-    };
-    short state;
-    short last_seen;
 
-    stack<dmap*> dmaps;
+    bool water, food;
 
-    Warrior_t(): state(NONE), last_seen(0) {};
+    short last_seen, city;
 
-    inline void set_bit(const state_t &bit) {
-        state |= bit;
-    }
-    inline void clear_bit(const state_t &bit) {
-        if (get_bit(bit)) state ^= bit;
-    }
-    inline bool get_bit(const state_t &bit) {
-        return state & bit;
-    }
+    Warrior_t(): water(false), food(false), last_seen(0), city(-1) {};
+
 };
 
 struct PLAYER_NAME::Car_t {
-    enum state_t {
-        NONE        =0,
-        FOLLOW_DMAP =1<<0,
-        ATTACK      =1<<1,
-        FUELING     =1<<2,
-        HUNT        =1<<3
-    };
-    short state;
+    bool fuel;
     short last_seen;
 
-    int unit_id; // For hunt
-    stack<dmap*> dmaps;
-
-    Car_t(): state(HUNT|ATTACK), last_seen(0) {};
-
-    inline void set_bit(const state_t &bit) {
-        state |= bit;
-    }
-    inline void clear_bit(const state_t &bit) {
-        if (get_bit(bit)) state ^= bit;
-    }
-    inline bool get_bit(const state_t &bit) {
-        return state & bit;
-    }
+    Car_t(): fuel(false), last_seen(0) {};
 };
 
 void PLAYER_NAME::init() {
@@ -388,6 +365,27 @@ void PLAYER_NAME::explore_city(const Pos &_p, const int &city, queue<pair<Pos, i
     }
 }
 
+void PLAYER_NAME::compute_warriors_city() {
+    warriors_player_city = vector<vector<int> > (nb_players(), vector<int>(nb_cities(), 0));
+    for (int i = 0; i < nb_cities(); ++i) {
+        for (const Pos &p : cities[i]) {
+            if (cell(p).id != -1) {
+                ++warriors_player_city[unit(cell(p).id).player][i];
+            }
+        }
+    }
+}
+void PLAYER_NAME::compute_warriors_movable() {
+    warriors_movable = vector<int> (nb_cities(), 0);
+    for (int i = 0; i < nb_cities(); ++i) {
+        for (int j = 0; j < nb_players(); ++j) {
+            if (j == me()) continue;
+            warriors_movable[i] = max(warriors_movable[i], warriors_player_city[j][i]);
+        }
+        warriors_movable[i] = warriors_player_city[me()][i] - warriors_movable[i];
+    }
+}
+
 void PLAYER_NAME::move_cars() {
     for (const int &car_id : cars(me()))
         if (can_move(car_id))
@@ -397,11 +395,18 @@ void PLAYER_NAME::move_cars() {
 void PLAYER_NAME::move_warriors() {
     if (round()%nb_players() != me()) return; // This line makes a lot of sense.
 
-    mark_enemy_cars();
+    if (AVOID_ENEMY_CARS) {
+        mark_enemy_cars();
+    }
+
+    if (LEAVE_CITY) {
+        compute_warriors_city();
+        compute_warriors_movable();
+    }
 
 #ifdef DEBUG
     LOG("-- ENEMY CARS --")
-    show_dmap(enemy_cars);
+        show_dmap(enemy_cars);
 #endif
 
     for (const int &warrior_id : warriors(me()))
@@ -412,35 +417,23 @@ void PLAYER_NAME::move_car(const int &car_id) {
     Car_t &c = registered_cars[car_id];
     const Unit u = unit(car_id);
 
-    LOG("Car ID:" << car_id)
+    LOG("Car ID:" << car_id);
 
-        // If we haven't seen him for 4(nb_players) rounds he has died and respawned
-        if (c.last_seen+nb_players() < round()) {
-            LOG("RESPAWNED")
-                c = Car_t();
-        }
+    // If we haven't seen him for 4(nb_players) rounds he has died and respawned
+    if (c.last_seen+nb_players() < round()) {
+        LOG("RESPAWNED");
+            c = Car_t();
+    }
 
     c.last_seen = round();
 
-    if (c.state == Car_t::NONE) assign_job(c, u.pos);
-
     check_suplies(c, u);
 
-    if (c.get_bit(Car_t::FOLLOW_DMAP)) {
-        if (c.dmaps.empty()) {
-            LOG("Empty dmap Stack for id: " << car_id)
-                return;
-        }
+    if (c.fuel) {
+        dmap *fm = &fuel_map;
+        if (u.food == 0)  *fm = fuel_map_empty;
 
-        dmap &m = *c.dmaps.top();
-
-        // Empty (except last) dmap stack if we reached our destinations
-        while (c.dmaps.size() > 1 and m[u.pos.i][u.pos.j]==0) {
-            c.dmaps.pop();
-            m = *c.dmaps.top();
-        }
-
-        list<Dir> l = get_dir_from_dmap(u, m);
+        list<Dir> l = get_dir_from_dmap(u, *fm);
         if (l.empty()) {
             for (const int &i : random_permutation(DirSize-1)) {
                 if (!pos_ok(u.pos + Dir(i))) continue;
@@ -453,31 +446,32 @@ void PLAYER_NAME::move_car(const int &car_id) {
             }
         }
         register_and_move(car_id, u.pos, l.front());
-    } else if (c.get_bit(Car_t::HUNT)) {
-        list<Dir> l;
-        for (const int &i : random_permutation(DirSize-1)) {
-            Pos p = u.pos + Dir(i);
-
-            if (!pos_ok(p)) continue;
-
-            const CellType ct = cell(p).type ;
-            if (ct == Road) l.emplace_front(Dir(i));
-            else if (ct == Desert) l.emplace_back(Dir(i));
-        }
-
-        remove_unsafe_dirs(u, l);
-
-        if (l.empty()) {
-            LOG("NO SAFE MOVES FOR CAR")
-                return;
-        }
-
-        const Dir dr = get_dir_to_warrior(l, u.pos);
-
-        if (dr == None) register_and_move(car_id, u.pos, l.front());
-
-        register_and_move(car_id, u.pos, dr);
+        return;
     }
+
+    list<Dir> l;
+    for (const int &i : random_permutation(DirSize-1)) {
+        Pos p = u.pos + Dir(i);
+
+        if (!pos_ok(p)) continue;
+
+        const CellType ct = cell(p).type ;
+        if (ct == Road) l.emplace_front(Dir(i));
+        else if (ct == Desert) l.emplace_back(Dir(i));
+    }
+
+    remove_unsafe_dirs(u, l);
+
+    if (l.empty()) {
+        LOG("NO SAFE MOVES FOR CAR")
+            return;
+    }
+
+    const Dir dr = get_dir_to_warrior(l, u.pos);
+
+    if (dr == None) register_and_move(car_id, u.pos, l.front());
+
+    register_and_move(car_id, u.pos, dr);
 }
 
 Dir PLAYER_NAME::get_dir_to_warrior(const list<Dir> &l, const Pos &_p) {
@@ -528,31 +522,12 @@ Dir PLAYER_NAME::get_dir_to_warrior(const list<Dir> &l, const Pos &_p) {
 }
 
 void PLAYER_NAME::check_suplies(Car_t &c, const Unit &u) {
-    const bool fuel = needs_fuel(u);
-
-    if (c.get_bit(Car_t::FUELING)) {
-        if (!fuel) {
-            c.clear_bit(Car_t::FUELING);
-            c.clear_bit(Car_t::FOLLOW_DMAP);
-        }
-    } else if (fuel) {
-        LOG("Getting fuel")
-            c.dmaps.push(&fuel_map);
-        c.set_bit(Car_t::FUELING);
-        c.set_bit(Car_t::FOLLOW_DMAP);
-    }
+    c.fuel = needs_fuel(u);
 }
 
 bool PLAYER_NAME::needs_fuel(const Unit &u) {
     const int d = fuel_map[u.pos.i][u.pos.j];
     return u.food - FUEL_MARGIN < d;
-}
-
-void PLAYER_NAME::assign_job(Car_t &c, const Pos &p) {
-    //TODO: fix this so it does something with more sense
-    //c.dmaps.push(&fuel_map);
-    //c.set_bit(Car_t::FOLLOW_DMAP);
-    c.set_bit(Car_t::HUNT);
 }
 
 void PLAYER_NAME::move_warrior(const int &warrior_id) {
@@ -562,7 +537,7 @@ void PLAYER_NAME::move_warrior(const int &warrior_id) {
     LOG("Warrior ID: " << warrior_id);
     LOG("  Water: " << u.water << " Food: " << u.food);
     LOG("  d2Water:" << water_map[u.pos.i][u.pos.j])
-    LOG("  d2Food: " << nearest_city_dmap(u.pos)[u.pos.i][u.pos.j]);
+        LOG("  d2Food: " << nearest_city_dmap(u.pos)[u.pos.i][u.pos.j]);
 
     // If we haven't seen him for 4(nb_players) rounds he has died and respawned
     if (w.last_seen+nb_players() < round()) {
@@ -572,67 +547,43 @@ void PLAYER_NAME::move_warrior(const int &warrior_id) {
 
     w.last_seen = round();
 
-    LOG("state: " << w.state << ' ' << Warrior_t::NONE);
-
-    if (w.state == Warrior_t::NONE) assign_job(w, u.pos);
+    if (w.city == -1) assign_city(w, u.pos);
 
     check_suplies(w, u);
 
-    if (w.get_bit(Warrior_t::FOLLOW_DMAP)) {
-        if (w.dmaps.empty()) {
-            LOG("Empty dmap Stack for id: " << warrior_id);
+    dmap *m = &cities_map[w.city];
+
+    if (w.water) m = &water_map;
+    if (w.food) m = &nearest_city_dmap(u.pos);
+
+    if (w.food and w.water) {
+        if (u.food > u.water) m = &water_map;
+        else m = &nearest_city_dmap(u.pos);
+    }
+
+    list<Dir> l = get_dir_from_dmap(u, *m);
+    if (l.empty()) {
+        for (const int &i : random_permutation(DirSize-1)) {
+            if (!pos_ok(u.pos + Dir(i))) continue;
+            l.push_back(Dir(i));
+        }
+        remove_unsafe_dirs(u, l);
+        if (l.empty()) {
+            LOG("No safe moves " << warrior_id);
             return;
         }
-
-        dmap &m = *w.dmaps.top();
-
-        LOG("WARRIOR HAS " << w.dmaps.size() << "stacked maps");
-
-        // Empty (except last) dmap stack if we reached our destinations
-        while (w.dmaps.size() > 1 and m[u.pos.i][u.pos.j]==0) {
-            w.dmaps.pop();
-            m = *w.dmaps.top();
-        }
-
-        list<Dir> l = get_dir_from_dmap(u, m);
-        if (l.empty()) {
-            for (const int &i : random_permutation(DirSize-1)) {
-                if (!pos_ok(u.pos + Dir(i))) continue;
-                l.push_back(Dir(i));
-            }
-            remove_unsafe_dirs(u, l);
-            if (l.empty()) {
-                LOG("No safe moves " << warrior_id);
-                return;
-            }
-        }
-        register_and_move(warrior_id, u.pos, l.front());
     }
+    register_and_move(warrior_id, u.pos, l.front());
 }
 
 void PLAYER_NAME::check_suplies(Warrior_t &w, const Unit &u) {
-    bool wat = needs_water(u), food = needs_food(u);
-
-    if (w.get_bit(Warrior_t::WATERING)) {
-        if (!wat) w.clear_bit(Warrior_t::WATERING);
-    } else if (wat) {
-        LOG("WATER NEEDED");
-        w.dmaps.push(&water_map);
-        w.set_bit(Warrior_t::WATERING);
-    }
-
-    if (w.get_bit(Warrior_t::FEEDING)) {
-        if (!food) w.clear_bit(Warrior_t::FEEDING);
-    } else if (food) {
-        LOG("FOOD NEEDED");
-        w.dmaps.push(&nearest_city_dmap(u.pos));
-        w.set_bit(Warrior_t::FEEDING);
-    }
+    w.water = needs_water(u);
+    w.food = needs_food(u);
 }
 
 bool PLAYER_NAME::needs_water(const Unit &u) {
     const int d = water_map[u.pos.i][u.pos.j];
-    return u.water - WATER_MARGIN < d;
+    return u.water - WATER_MARGIN_LOW < d;
 }
 
 bool PLAYER_NAME::needs_food(const Unit &u) {
@@ -651,23 +602,14 @@ PLAYER_NAME::dmap &PLAYER_NAME::nearest_city_dmap(const Pos &p) {
     return cities_map[nearest_city[p.i][p.j]];
 }
 
-void PLAYER_NAME::assign_job(Warrior_t &w, const Pos &p) {
-    LOG("JOB ASSIGNMENT");
-    //if (random(0, 1) == 1) {
-    //const int city = nearest_city[p.i][p.j];
-    //w.dmaps.push(&cities_map[city]);
-    //} else {
-    LOG("ASSIGNING RANDOM REACHABLE CITY");
-    w.set_bit(Warrior_t::FOLLOW_DMAP);
-    //for (const int &i : random_permutation(nb_cities()-1)) {
-        //if (cities_map[i][p.i][p.j] < warriors_health()*2/3) {
-            //w.dmaps.push(&cities_map[i]);
-            //return;
-        //}
-    //}
-    w.dmaps.push(&nearest_city_dmap(p));
-    LOG("NO CITY REACHABLE, GONNA DIE");
-    //}
+void PLAYER_NAME::assign_city(Warrior_t &w, const Pos &p) {
+    for (const int &i : random_permutation(nb_cities()-1)) {
+        if (cities_map[i][p.i][p.j] < warriors_health()-FOOD_MARGIN) {
+            w.city = i;
+            // try to find unowned cities
+            if (cell(cities[i][0]).owner != me()) return;
+        }
+    }
 }
 
 list<Dir> PLAYER_NAME::get_dir_from_dmap(const Unit &u, const dmap &m) {
@@ -693,7 +635,9 @@ bool PLAYER_NAME::is_unsafe(const Unit &u, const Dir &dr) {
     const int u_id = cell(p).id;
     if (movements[p.i][p.j] == round()) return true;
 
-    if (u.type == Warrior and enemy_cars[p.i][p.j] == round()) return true;
+    if (AVOID_ENEMY_CARS) {
+        if (u.type == Warrior and enemy_cars[p.i][p.j] == round()) return true;
+    }
 
     if (u_id != -1) {
         if (unit(u_id).player == me()) return true;
