@@ -5,3 +5,5 @@ SecGame
 Makefile.deps
 *.res
 *.txt
+*/
+!Viewer/
