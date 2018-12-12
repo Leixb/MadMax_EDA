@@ -644,6 +644,7 @@ inline int PLAYER_NAME::warrior_diff_city(const int &city) {
 
 void PLAYER_NAME::assign_city(Warrior_t &w, const Pos &p) {
     const int &city = nearest_city[p.i][p.j];
+    if (w.city != -1 and cell(cities[w.city][0]).owner != me()) return;
     w.city = city;
     //if (cell(p).type == City) {
         // If leaving makes us lose city, stay.
