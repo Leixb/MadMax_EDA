@@ -11,7 +11,7 @@
  * Write the name of your player and save this file
  * with the same name and .cc extension.
  */
-#define PLAYER_NAME Silv3rBull3t
+#define PLAYER_NAME S1lv3rBull3t
 
 struct PLAYER_NAME : public Player {
 
@@ -31,16 +31,12 @@ struct PLAYER_NAME : public Player {
     const int INF=1e8;
 
     const char CITY_FIGHT_RATIO=75; // Percentatge of probability to win when taking fight
-    const char WATER_MARGIN_LOW=8,
-          WATER_MARGIN_HIG=25;
+    const char WATER_MARGIN=8,
     const char FOOD_MARGIN=7;
     const char FUEL_MARGIN=7;
     const char MOVE_OUT_LIMIT=3;
 
-    const bool ASSIGN_RANDOM=false,
-          AVOID_ENEMY_CARS=false,
-          LEAVE_CITY=false,
-          RANDOMIZE_WATER_TIME=false;
+    const bool AVOID_ENEMY_CARS=true;
 
     // Types
     struct Warrior_t;
@@ -62,7 +58,8 @@ struct PLAYER_NAME : public Player {
     dmap enemy_cars;
 
     vector<vector<int> > warriors_player_city;
-    vector<int> warriors_movable;
+    vector<int> enemy_warriors_city;
+    vector<int> moved_warriors_city;
 
     // Helper functions
 
@@ -73,6 +70,8 @@ struct PLAYER_NAME : public Player {
 
     void compute_warriors_city();
     void compute_warriors_movable();
+
+    inline int warrior_diff_city(const int &city);
 
     inline dmap &nearest_city_dmap(const Pos &p);
 
@@ -376,13 +375,12 @@ void PLAYER_NAME::compute_warriors_city() {
     }
 }
 void PLAYER_NAME::compute_warriors_movable() {
-    warriors_movable = vector<int> (nb_cities(), 0);
+    enemy_warriors_city = vector<int> (nb_cities(), 0);
     for (int i = 0; i < nb_cities(); ++i) {
         for (int j = 0; j < nb_players(); ++j) {
             if (j == me()) continue;
-            warriors_movable[i] = max(warriors_movable[i], warriors_player_city[j][i]);
+            enemy_warriors_city[i] = max(enemy_warriors_city[i], warriors_player_city[j][i]);
         }
-        warriors_movable[i] = warriors_player_city[me()][i] - warriors_movable[i];
     }
 }
 
@@ -399,14 +397,14 @@ void PLAYER_NAME::move_warriors() {
         mark_enemy_cars();
     }
 
-    if (LEAVE_CITY) {
-        compute_warriors_city();
-        compute_warriors_movable();
-    }
+    compute_warriors_city();
+    compute_warriors_movable();
+
+    moved_warriors_city = vector<int> (nb_cities(), 0);
 
 #ifdef DEBUG
-    LOG("-- ENEMY CARS --")
-        show_dmap(enemy_cars);
+    LOG("-- ENEMY CARS --");
+    show_dmap(enemy_cars);
 #endif
 
     for (const int &warrior_id : warriors(me()))
@@ -422,7 +420,7 @@ void PLAYER_NAME::move_car(const int &car_id) {
     // If we haven't seen him for 4(nb_players) rounds he has died and respawned
     if (c.last_seen+nb_players() < round()) {
         LOG("RESPAWNED");
-            c = Car_t();
+        c = Car_t();
     }
 
     c.last_seen = round();
@@ -470,8 +468,7 @@ void PLAYER_NAME::move_car(const int &car_id) {
     const Dir dr = get_dir_to_warrior(l, u.pos);
 
     if (dr == None) register_and_move(car_id, u.pos, l.front());
-
-    register_and_move(car_id, u.pos, dr);
+    else register_and_move(car_id, u.pos, dr);
 }
 
 Dir PLAYER_NAME::get_dir_to_warrior(const list<Dir> &l, const Pos &_p) {
@@ -536,8 +533,8 @@ void PLAYER_NAME::move_warrior(const int &warrior_id) {
 
     LOG("Warrior ID: " << warrior_id);
     LOG("  Water: " << u.water << " Food: " << u.food);
-    LOG("  d2Water:" << water_map[u.pos.i][u.pos.j])
-        LOG("  d2Food: " << nearest_city_dmap(u.pos)[u.pos.i][u.pos.j]);
+    LOG("  d2Water:" << water_map[u.pos.i][u.pos.j]);
+    LOG("  d2Food: " << nearest_city_dmap(u.pos)[u.pos.i][u.pos.j]);
 
     // If we haven't seen him for 4(nb_players) rounds he has died and respawned
     if (w.last_seen+nb_players() < round()) {
@@ -547,7 +544,7 @@ void PLAYER_NAME::move_warrior(const int &warrior_id) {
 
     w.last_seen = round();
 
-    if (w.city == -1) assign_city(w, u.pos);
+    assign_city(w, u.pos);
 
     check_suplies(w, u);
 
@@ -573,17 +570,22 @@ void PLAYER_NAME::move_warrior(const int &warrior_id) {
             return;
         }
     }
+
+    if (cell(u.pos).type == City and cell(u.pos + l.front()).type != City) {
+        ++moved_warriors_city[nearest_city[u.pos.i][u.pos.j]];
+    }
+
     register_and_move(warrior_id, u.pos, l.front());
 }
 
 void PLAYER_NAME::check_suplies(Warrior_t &w, const Unit &u) {
-    w.water = needs_water(u);
-    w.food = needs_food(u);
+    w.water = (w.water and u.water < warriors_health()) or needs_water(u);
+    w.food = (w.food and u.water < warriors_health()) or needs_food(u);
 }
 
 bool PLAYER_NAME::needs_water(const Unit &u) {
     const int d = water_map[u.pos.i][u.pos.j];
-    return u.water - WATER_MARGIN_LOW < d;
+    return u.water - WATER_MARGIN< d;
 }
 
 bool PLAYER_NAME::needs_food(const Unit &u) {
@@ -602,7 +604,24 @@ PLAYER_NAME::dmap &PLAYER_NAME::nearest_city_dmap(const Pos &p) {
     return cities_map[nearest_city[p.i][p.j]];
 }
 
+inline int PLAYER_NAME::warrior_diff_city(const int &city) {
+    return warriors_player_city[me()][city] - enemy_warriors_city[city];
+}
+
 void PLAYER_NAME::assign_city(Warrior_t &w, const Pos &p) {
+    const int &city = nearest_city[p.i][p.j];
+    w.city = city;
+    //if (cell(p).type == City) {
+        // If leaving makes us lose city, stay.
+        LOG("ENEMIES IN CITY: " << enemy_warriors_city[city] << endl
+            << "ALLIES:" << warriors_player_city[me()][city] << endl
+            << "moved: " << moved_warriors_city[city] << endl);
+        //if (cell(p).owner != me()) return;
+        if (warrior_diff_city(city) - moved_warriors_city[city] - 1 < MOVE_OUT_LIMIT) {
+            LOG("STAYING NEAREST CITY");
+            return;
+        }
+    //}
     for (const int &i : random_permutation(nb_cities()-1)) {
         if (cities_map[i][p.i][p.j] < warriors_health()-FOOD_MARGIN) {
             w.city = i;
@@ -610,8 +629,7 @@ void PLAYER_NAME::assign_city(Warrior_t &w, const Pos &p) {
             if (cell(cities[i][0]).owner != me()) return;
         }
     }
-    LOG("No suitable cities found");
-    w.city = random(0, nb_cities()-1);
+    LOG("No suitable cities found Nearest taken");
 }
 
 list<Dir> PLAYER_NAME::get_dir_from_dmap(const Unit &u, const dmap &m) {
