@@ -257,6 +257,24 @@ void PLAYER_NAME::mark_car_reach(const Pos &p, const int &depth) {
 
 void PLAYER_NAME::compute_fuel_map(priority_queue<fq_t, vector<fq_t>, greater<fq_t> > &q) {
     fuel_map = dmap(rows(), vector<int>(cols(), INF));
+
+    while(!q.empty()) {
+        const Pos p = q.top().second;
+        if (q.top().first != -1) break;
+        q.pop();
+
+        fuel_map[p.i][p.j] = -1;
+
+        for (Dir i : {Bottom, Right, Top, Left}) {
+            const Pos p2 = p + Dir(i);
+            if (!pos_ok(p2)) continue;
+
+            const CellType ct = cell(p2).type;
+            if (ct == Road or ct == Desert)
+                q.emplace(0, p2);
+        }
+    }
+
     while(!q.empty()) {
         const int d = q.top().first;
         const Pos p = q.top().second;
