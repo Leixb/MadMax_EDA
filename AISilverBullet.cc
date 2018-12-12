@@ -34,7 +34,8 @@ struct PLAYER_NAME : public Player {
     const char WATER_MARGIN=8;
     const char FOOD_MARGIN=7;
     const char FUEL_MARGIN=7;
-    const char MOVE_OUT_LIMIT=3;
+    const char MOVE_OUT_LIMIT=3; // Warriors to leave in city
+    const char MAX_DIST_CAR=50;
 
     const bool AVOID_ENEMY_CARS=true;
 
@@ -78,6 +79,7 @@ struct PLAYER_NAME : public Player {
     typedef pair<int, Pos> fq_t;
     void compute_fuel_map(priority_queue<fq_t, vector<fq_t>, greater<fq_t> > &q);
     Dir get_dir_to_warrior(const list<Dir> &l, const Pos &_p);
+    int dist_pos(const Pos &a, const Pos &b);
 
     list<Dir> get_dir_from_dmap(const Unit &u, const dmap &m);
     void remove_unsafe_dirs(const Unit &u, list<Dir> &l);
@@ -461,14 +463,26 @@ void PLAYER_NAME::move_car(const int &car_id) {
     remove_unsafe_dirs(u, l);
 
     if (l.empty()) {
-        LOG("NO SAFE MOVES FOR CAR")
-            return;
+        LOG("NO SAFE MOVES FOR CAR");
+        return;
     }
 
     const Dir dr = get_dir_to_warrior(l, u.pos);
 
-    if (dr == None) register_and_move(car_id, u.pos, l.front());
-    else register_and_move(car_id, u.pos, dr);
+    // If no warrior near, go to fuel station
+    if (dr == None) {
+        list<Dir> l = get_dir_from_dmap(u, fuel_map);
+        if (l.empty()) {
+            LOG("WILL NOT MOVE, CAR DOOMED");
+            return;
+        }
+        register_and_move(car_id, u.pos, l.front());
+    } else register_and_move(car_id, u.pos, dr);
+}
+
+// Cartesian distance(without sqrt)
+int PLAYER_NAME::dist_pos(const Pos &a, const Pos &b) {
+    return (a.i - b.i)*(a.i-b.i) + (a.j - b.j)*(a.j-b.j);
 }
 
 Dir PLAYER_NAME::get_dir_to_warrior(const list<Dir> &l, const Pos &_p) {
@@ -489,6 +503,8 @@ Dir PLAYER_NAME::get_dir_to_warrior(const list<Dir> &l, const Pos &_p) {
         Pos p;
         tie(d, dr, p) = q.top();
         q.pop();
+
+        if (d >= MAX_DIST_CAR) continue;
 
         if (visited[p.i][p.j]) continue;
         visited[p.i][p.j] = true;
