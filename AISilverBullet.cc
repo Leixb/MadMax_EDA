@@ -31,7 +31,7 @@ struct PLAYER_NAME : public Player {
     const int INF=1e8;
 
     const char CITY_FIGHT_RATIO=75; // Percentatge of probability to win when taking fight
-    const char WATER_MARGIN=8,
+    const char WATER_MARGIN=8;
     const char FOOD_MARGIN=7;
     const char FUEL_MARGIN=7;
     const char MOVE_OUT_LIMIT=3;
