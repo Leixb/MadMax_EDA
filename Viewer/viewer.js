@@ -10,6 +10,9 @@ var gameAnim = true;
 var gameDirection = 1;
 var actRound = 0; // Current round index.
 
+var showFuel=true;
+var showFood=true;
+var showWater=true;
 
 // Data.
 var raw_data_str; // String for storing the raw data.
@@ -439,14 +442,18 @@ function drawCar (i, j, f) {
   context.moveTo(j*tileSize + offset + 1.4*size, i*tileSize + offset - 0.4*size);
   context.lineTo(j*tileSize + offset - 0.4*size, i*tileSize + offset + 1.4*size);
   context.stroke();
-  //context.fillStyle = "red";
-  context.font = 'bold 12px Sans-serif';
-  context.strokeStyle = 'black';
-  context.lineWidth = 0.7;
-  context.fillText(f, j*tileSize + offset + 1.4*size, i*tileSize + offset - 0.4*size);
-  context.strokeText(f, j*tileSize + offset + 1.4*size, i*tileSize + offset - 0.4*size);
-  context.fill();
-  context.lineWidth = unitLineWidth;
+
+  if (showFuel) {
+    context.font = 'bold 12px Sans-serif';
+    context.strokeStyle = 'black';
+    context.lineWidth = 0.7;
+    context.fillText(f, j*tileSize + offset + 1.4*size, i*tileSize + offset - 0.4*size);
+    context.strokeText(f, j*tileSize + offset + 1.4*size, i*tileSize + offset - 0.4*size);
+    context.fill();
+    context.stroke();
+    context.lineWidth = unitLineWidth;
+  }
+
 }
 
 
@@ -457,16 +464,23 @@ function drawWarrior (i, j, f, w) {
   context.arc(j*tileSize + size/2 + offset, i*tileSize + size/2 + offset, size/2, 0, Math.PI*2, false);
   context.fill();
   context.stroke();
+
   context.beginPath();
   context.font = 'bold 12px Sans-serif';
   context.strokeStyle = 'black';
   context.lineWidth = 0.7;
-  context.fillText(f, j*tileSize + offset + 1.4*size, i*tileSize + offset - 0.4*size);
-  context.strokeText(f, j*tileSize + offset + 1.4*size, i*tileSize + offset - 0.4*size);
-  context.fillText(w, j*tileSize + offset + 1.4*size, i*tileSize - offset - 0.4*size);
-  context.strokeText(w, j*tileSize + offset + 1.4*size, i*tileSize - offset - 0.4*size);
+  if (showFood) {
+    context.fillText(f, j*tileSize + offset + 1.4*size, i*tileSize + offset - 0.4*size);
+    context.strokeText(f, j*tileSize + offset + 1.4*size, i*tileSize + offset - 0.4*size);
+  }
+  if (showWater) {
+    context.fillText(w, j*tileSize + offset + 1.4*size, i*tileSize - offset - 0.4*size);
+    context.strokeText(w, j*tileSize + offset + 1.4*size, i*tileSize - offset - 0.4*size);
+  }
   context.fill();
+  context.stroke();
   context.lineWidth = unitLineWidth;
+
 }
 
 
