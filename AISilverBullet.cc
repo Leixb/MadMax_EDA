@@ -11,7 +11,7 @@
  * Write the name of your player and save this file
  * with the same name and .cc extension.
  */
-#define PLAYER_NAME S1lv3r8ull3t
+#define PLAYER_NAME S1lv3r8ull37
 
 struct PLAYER_NAME : public Player {
 
@@ -36,6 +36,7 @@ struct PLAYER_NAME : public Player {
     const char FUEL_MARGIN=7;
     const char MOVE_OUT_LIMIT=3; // Warriors to leave in city
     const char MAX_DIST_CAR=50;
+    const char MAX_MOVED_WARRIORS=3;
 
     const bool AVOID_ENEMY_CARS=true;
 
@@ -92,6 +93,8 @@ struct PLAYER_NAME : public Player {
     bool fight_desert(const Unit &attacker_id, const Unit &victim_id);
     inline bool fight_city(const Unit &attacker_id, const Unit &victim_id);
 
+    int rounds_to_win(const int &n);
+
     void assign_city(Warrior_t &w, const Pos &p);
 
     void check_suplies(Warrior_t &w, const Unit &u);
@@ -116,6 +119,7 @@ struct PLAYER_NAME : public Player {
      */
     virtual void play () {
         if (round() == 0) init();
+        LOG("CARS: " << cars(me()).size());
         move_cars();
         move_warriors();
     }
@@ -473,7 +477,7 @@ void PLAYER_NAME::move_car(const int &car_id) {
 
         if (!pos_ok(p)) continue;
 
-        const CellType ct = cell(p).type ;
+        const CellType ct = cell(p).type;
         if (ct == Road) l.emplace_front(Dir(i));
         else if (ct == Desert) l.emplace_back(Dir(i));
     }
@@ -570,6 +574,14 @@ void PLAYER_NAME::move_warrior(const int &warrior_id) {
     LOG("  d2Water:" << water_map[u.pos.i][u.pos.j]);
     LOG("  d2Food: " << nearest_city_dmap(u.pos)[u.pos.i][u.pos.j]);
 
+#ifdef DEBUG
+    if (cell(u.pos).type == City and u.food != warriors_health()) {
+        LOG("WARRIOR IN CITY WITH FOOD: " << u.food);
+        LOG("city owner: " << cell(u.pos).owner);
+        LOG("warrior owner: " << u.player);
+    }
+#endif
+
     // If we haven't seen him for 4(nb_players) rounds he has died and respawned
     if (w.last_seen+nb_players() < round()) {
         LOG("RESPAWNED");
@@ -607,6 +619,9 @@ void PLAYER_NAME::move_warrior(const int &warrior_id) {
 
     if (cell(u.pos).type == City and cell(u.pos + l.front()).type != City) {
         ++moved_warriors_city[nearest_city[u.pos.i][u.pos.j]];
+        LOG("MOVING OUT OF CITY " << nearest_city[u.pos.i][u.pos.j]);
+        LOG("moved warriors: " << moved_warriors_city[nearest_city[u.pos.i][u.pos.j]]);
+        LOG("warriors in city: " << warriors_player_city[me()][nearest_city[u.pos.i][u.pos.j]]);
     }
 
     register_and_move(warrior_id, u.pos, l.front());
@@ -646,6 +661,8 @@ void PLAYER_NAME::assign_city(Warrior_t &w, const Pos &p) {
     const int &city = nearest_city[p.i][p.j];
     if (w.city != -1 and cell(cities[w.city][0]).owner != me()) return;
     w.city = city;
+    if (cell(p).type == City and moved_warriors_city[city] >= MAX_MOVED_WARRIORS)
+        return;
     //if (cell(p).type == City) {
         // If leaving makes us lose city, stay.
         LOG("ENEMIES IN CITY: " << enemy_warriors_city[city] << endl
@@ -661,7 +678,10 @@ void PLAYER_NAME::assign_city(Warrior_t &w, const Pos &p) {
         if (cities_map[i][p.i][p.j] < warriors_health()-FOOD_MARGIN) {
             w.city = i;
             // try to find unowned cities
-            if (cell(cities[i][0]).owner != me()) return;
+            //if (cell(cities[i][0]).owner != me()) return;
+            if (warrior_diff_city(i) - moved_warriors_city[i] - 1 < MOVE_OUT_LIMIT) {
+                return;
+            }
         }
     }
     LOG("No suitable cities found Nearest taken");
@@ -727,26 +747,31 @@ void PLAYER_NAME::remove_unsafe_dirs(const Unit &u, list<Dir> &l) {
 
 bool PLAYER_NAME::fight(const int &attacker_id, const int &victim_id) {
     const Unit attacker=unit(attacker_id), victim=unit(victim_id);
-    if (cell(victim.pos).type == City) return fight_city(attacker, victim);
+    if (cell(victim.pos).type == City and cell(attacker.pos).type == City) return fight_city(attacker, victim);
     return fight_desert(attacker, victim);
+}
+
+int PLAYER_NAME::rounds_to_win(const int &n) {
+    if (n <= 6) return 1;
+    return (n-1)/3 + 1;
 }
 
 bool PLAYER_NAME::fight_desert(const Unit &attacker, const Unit &victim) {
     if (victim.type == Car) return false; // Never attack cars
-    if (attacker.type == Car) return true; // Car wins
+    if (attacker.type == Car) return cell(victim.pos).type != City; // Car wins
     if (victim.food <= 6 or victim.water <= 6) return true;
 
-    if (victim.food > attacker.food and victim.water > attacker.water)
+    if (victim.food > attacker.food+3 and victim.water > attacker.water+3)
         return false;
 
     // TODO: check this is correct
     if (victim.food < victim.water)
-        return attacker.food > victim.food and attacker.water > victim.food;
-    return attacker.water > victim.water and attacker.food > victim.water;
+        return attacker.food >= victim.food-3 and rounds_to_win(victim.food) <= rounds_to_win(attacker.water);
+    return attacker.water >= victim.water-3 and rounds_to_win(victim.water) <= rounds_to_win(attacker.food);
 }
 
 bool PLAYER_NAME::fight_city(const Unit &attacker, const Unit &victim) {
-    if (attacker.type == Car) return false; // Cannot move into victim
+    //if (attacker.type == Car) return false; // Cannot move into victim
     return attacker.water*100/(attacker.water + victim.water) >= CITY_FIGHT_RATIO;
 }
 
