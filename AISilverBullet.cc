@@ -11,7 +11,7 @@
  * Write the name of your player and save this file
  * with the same name and .cc extension.
  */
-#define PLAYER_NAME S1lv3r8ull37
+#define PLAYER_NAME Berumotto
 
 struct PLAYER_NAME : public Player {
 
@@ -322,25 +322,6 @@ void PLAYER_NAME::map_nearest_city(queue<pair<Pos, int> > &q) {
 void PLAYER_NAME::bfs(queue<pair<Pos, int> > &q, dmap &m, const bool &cross_city) {
     m = dmap(rows(), vector<int>(cols(), INF));
 
-    // Move all -1 to borders without using diagonal moves (they dont refill)
-
-    while(!q.empty()) {
-        const Pos p = q.front().first;
-        if (q.front().second != -1) break;
-        q.pop();
-
-        m[p.i][p.j] = -1;
-
-        for (Dir i : {Bottom, Right, Top, Left}) {
-            const Pos p2 = p + Dir(i);
-            if (!pos_ok(p2)) continue;
-
-            const CellType ct = cell(p2).type;
-            if (ct == Road or ct == Desert or (ct == City and cross_city))
-                q.emplace(p2, 0);
-        }
-    }
-
     // We can start now
 
     while(!q.empty()) {
@@ -600,7 +581,8 @@ void PLAYER_NAME::move_warrior(const int &warrior_id) {
     if (w.food) m = &nearest_city_dmap(u.pos);
 
     if (w.food and w.water) {
-        if (u.food > u.water) m = &water_map;
+        if (nearest_city_dmap(u.pos)[u.pos.i][u.pos.j] >= water_map[u.pos.i][u.pos.j])
+            m = &water_map;
         else m = &nearest_city_dmap(u.pos);
     }
 
@@ -617,7 +599,7 @@ void PLAYER_NAME::move_warrior(const int &warrior_id) {
         }
     }
 
-    if (cell(u.pos).type == City and cell(u.pos + l.front()).type != City) {
+    if (cell(u.pos).type == City and w.city != nearest_city[u.pos.i][u.pos.j]) {
         ++moved_warriors_city[nearest_city[u.pos.i][u.pos.j]];
         LOG("MOVING OUT OF CITY " << nearest_city[u.pos.i][u.pos.j]);
         LOG("moved warriors: " << moved_warriors_city[nearest_city[u.pos.i][u.pos.j]]);
