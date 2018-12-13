@@ -397,8 +397,8 @@ function drawGame () {
       }
     }
 
-    if (u.type == 'c') drawCar(i, j);
-    else drawWarrior(i, j);
+    if (u.type == 'c') drawCar(i, j, u.food);
+    else drawWarrior(i, j, u.food, u.water);
   }
 
   if (gameAnim && frames >= FRAMES_PER_ROUND/2) {
@@ -424,7 +424,7 @@ function drawStation (i, j, col) {
 }
 
 
-function drawCar (i, j) {
+function drawCar (i, j, f) {
   var size = unitSize * tileSize * 0.6;
   var offset = (tileSize - size) / 2;
   context.beginPath();
@@ -439,16 +439,34 @@ function drawCar (i, j) {
   context.moveTo(j*tileSize + offset + 1.4*size, i*tileSize + offset - 0.4*size);
   context.lineTo(j*tileSize + offset - 0.4*size, i*tileSize + offset + 1.4*size);
   context.stroke();
+  //context.fillStyle = "red";
+  context.font = 'bold 12px Sans-serif';
+  context.strokeStyle = 'black';
+  context.lineWidth = 0.7;
+  context.fillText(f, j*tileSize + offset + 1.4*size, i*tileSize + offset - 0.4*size);
+  context.strokeText(f, j*tileSize + offset + 1.4*size, i*tileSize + offset - 0.4*size);
+  context.fill();
+  context.lineWidth = unitLineWidth;
 }
 
 
-function drawWarrior (i, j) {
+function drawWarrior (i, j, f, w) {
   var size = unitSize * tileSize * 0.4;
   var offset = (tileSize - size) / 2;
   context.beginPath();
   context.arc(j*tileSize + size/2 + offset, i*tileSize + size/2 + offset, size/2, 0, Math.PI*2, false);
   context.fill();
   context.stroke();
+  context.beginPath();
+  context.font = 'bold 12px Sans-serif';
+  context.strokeStyle = 'black';
+  context.lineWidth = 0.7;
+  context.fillText(f, j*tileSize + offset + 1.4*size, i*tileSize + offset - 0.4*size);
+  context.strokeText(f, j*tileSize + offset + 1.4*size, i*tileSize + offset - 0.4*size);
+  context.fillText(w, j*tileSize + offset + 1.4*size, i*tileSize - offset - 0.4*size);
+  context.strokeText(w, j*tileSize + offset + 1.4*size, i*tileSize - offset - 0.4*size);
+  context.fill();
+  context.lineWidth = unitLineWidth;
 }
 
 
@@ -678,3 +696,5 @@ function init () {
     loadFile(game, initGame);
   }
 }
+
+// vim:sw=2:ts=2:et:

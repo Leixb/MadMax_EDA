@@ -642,9 +642,15 @@ void Board::next (const vector<Action>& act, ostream& os) {
     if (not killed[id]) {
       Unit& u = unit_[id];
       assert(ut_ok(u.type));
+#ifdef BOARD_FIX
+      if (u.type == Warrior and u.player == round()%4
+          and cell(u.pos).type == City)
+        u.food = warriors_health();
+#else
       if (u.type == Warrior and u.player == round()%4
           and cell(u.pos).owner == u.player)
         u.food = warriors_health();
+#endif
     }
 
   // recharges water
@@ -721,7 +727,12 @@ int Board::area (int i, int j) {
 
 
 bool Board::before (const vector<Pos>& V1, const vector<Pos>& V2) {
+#ifdef BOARD_FIX
+  if (V1.size() != V2.size()) return V1.size() > V2.size();
+  return V2[0] < V1[0];
+#else
   return V1.size() > V2.size();
+#endif
 }
 
 

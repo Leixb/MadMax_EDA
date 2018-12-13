@@ -15,13 +15,14 @@
 DUMMY_OBJ = AIDummy.o.Linux64
 
 # Add here any extra .o player files you want to link to the executable
-EXTRA_OBJS =
+EXTRA_OBJS = ./objs/*.o
 
 # Config
 OPTIMIZE = 2 # Optimization level (0 to 3)
 DEBUG    = 1 # Compile for debugging (0 or 1)
 PROFILE  = 0 # Compile for profile (0 or 1)
 32BITS   = 0 # Produce 32 bits objects on 64 bits systems (0 or 1)
+BOARD_FIX = 1
 
 
 # Do not edit past this line
@@ -43,17 +44,20 @@ endif
 ifeq ($(strip $(32BITS)),1)
 	ARCHFLAGS=-m32 -L/usr/lib32
 endif
+ifeq ($(strip $(BOARD_FIX)),1)
+	MYFLAGS=-DBOARD_FIX
+endif
 
-CXXFLAGS = -std=c++11 -Wall -Wno-unused-variable $(ARCHFLAGS) $(PROFILEFLAGS) $(DEBUGFLAGS) -O$(strip $(OPTIMIZE))
+CXXFLAGS = -std=c++11 -Wall -Wno-unused-variable $(ARCHFLAGS) $(PROFILEFLAGS) $(DEBUGFLAGS) $(MYFLAGS) -O$(strip $(OPTIMIZE))
 
-LDFLAGS  = -std=c++11 -lm $(ARCHFLAGS) $(PROFILEFLAGS) $(DEBUGFLAGS) -O$(strip $(OPTIMIZE))
+LDFLAGS  = -std=c++11 -lm $(ARCHFLAGS) $(PROFILEFLAGS) $(DEBUGFLAGS) $(MYFLAGS) -O$(strip $(OPTIMIZE))
 
 # Rules
 
-all: Game 
+all: Game
 
 clean:
-	rm -rf Game SecGame *.o *.exe Makefile.deps
+	-rm -rf Game SecGame *.o *.exe Makefile.deps
 
 # Order of objects is important here to deactivate standard sleep function.
 
