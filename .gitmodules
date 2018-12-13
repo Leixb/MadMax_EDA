@@ -1,0 +1,3 @@
+[submodule "Viewer"]
+	path = Viewer
+	url = git@github.com:Leixb/EDA_MadMax_Viewer.git
